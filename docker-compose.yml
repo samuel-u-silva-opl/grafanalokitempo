@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  loki:
+    image: grafana/loki:2.9.0
+    configs:
+      - source: loki_config
+        target: /etc/loki/config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    configs:
+      - source: promtail_config
+        target: /etc/promtail/config.yml
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      mode: global  # 1 promtail por nó
+      placement:
+        constraints: [node.platform.os == linux]
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    configs:
+      - source: tempo_config
+        target: /etc/tempo/config.yml
+    volumes:
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # API Tempo
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "9411:9411"   # Zipkin
+      - "14268:14268" # Jaeger Thrift
+    deploy:
+      mode: replicated
+      replicas: 1
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    deploy:
+      mode: replicated
+      replicas: 1
+
+volumes:
+  loki_data:
+  grafana_data:
+  tempo_data:
+
+configs:
+  loki_config:
+    file: ./loki-config.yml
+  promtail_config:
+    file: ./promtail-config.yml
+  tempo_config:
+    file: ./tempo-config.yml
