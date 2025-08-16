@@ -1,57 +1,35 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  mongodb:
-    image: mongo:6.0
-    container_name: mongodb
-    restart: always
-    volumes:
-      - mongo_data:/data/db
-
-  opensearch:
-    image: opensearchproject/opensearch:2.11.1
-    container_name: opensearch
-    environment:
-      - discovery.type=single-node
-      - plugins.security.disabled=true
-      - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
+  loki:
+    image: grafana/loki:2.9.0
     ports:
-      - "9200:9200"
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    deploy:
+      placement:
+        constraints: [node.role == manager]
 
-  graylog:
-    image: graylog/graylog:6.3.2
-    container_name: graylog
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3000:3000"
     environment:
-      - GRAYLOG_PASSWORD_SECRET=uma_senha_bem_grande_aqui
-      - GRAYLOG_ROOT_PASSWORD_SHA2=sha256_da_sua_senha
-      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
-      - GRAYLOG_ELASTICSEARCH_HOSTS=http://opensearch:9200
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     depends_on:
-      - mongodb
-      - opensearch
-    ports:
-      - "9000:9000"       # Interface Web
-      - "12201:12201/udp" # GELF UDP
-      - "12201:12201/tcp" # GELF TCP
+      - loki
+    deploy:
+      placement:
+        constraints: [node.role == manager]
 
-  filebeat:
-    image: docker.elastic.co/beats/filebeat:8.12.2
-    container_name: filebeat
-    user: root
+  promtail:
+    image: grafana/promtail:2.9.0
     volumes:
+      - /var/log:/var/log
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-    depends_on:
-      - graylog
-
-volumes:
-  mongo_data:
-  opensearch_data:
+      - /etc/machine-id:/etc/machine-id:ro
+      - ./promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    deploy:
+      mode: global
